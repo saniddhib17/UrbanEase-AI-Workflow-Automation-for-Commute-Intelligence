@@ -1,0 +1,345 @@
+{
+  "name": "trail1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        432,
+        -208
+      ],
+      "id": "7e9d98d1-6798-463b-bd85-df9873cc0d72",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const routes = [\n  {\n    name: \"Ruwi → Al Khuwair\",\n    // [lon, lat]  (Ruwi building)\n    from: [58.545741301849986, 23.586800229061833],\n    // [lon, lat]  (Al Khuwair)\n    to:   [58.446802264459066, 23.596468241478497]\n  }\n];\nreturn routes.map(r => ({ json: r }));\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        -208
+      ],
+      "id": "b581a167-64d5-4337-9f4a-ab992c884b95",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3caadab-b1c4-4b6e-b643-4dd79a0ba5b2",
+              "name": "route_name",
+              "value": "={{$json.name}}",
+              "type": "string"
+            },
+            {
+              "id": "6625c450-bda5-45ad-9956-d414ac0aeeb3",
+              "name": "lon_from",
+              "value": "={{$json.from[0]}}",
+              "type": "string"
+            },
+            {
+              "id": "2b79fa8d-9e68-4f07-80bf-9241f6e4ce48",
+              "name": "lat_from",
+              "value": "={{$json.from[1]}}",
+              "type": "string"
+            },
+            {
+              "id": "9697fe69-723b-494e-a942-b4a51ddd1287",
+              "name": "lon_to",
+              "value": "={{$json.to[0]}}",
+              "type": "string"
+            },
+            {
+              "id": "ab71054b-de7d-4038-a548-b3ac4834be03",
+              "name": "lat_to",
+              "value": "={{$json.to[1]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        -192
+      ],
+      "id": "a3b612d9-617c-47ef-8792-95a28946dbbe",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openWeatherMapApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "lat",
+              "value": "={{ $json.lat_to }}"
+            },
+            {
+              "name": "lon",
+              "value": "={{ $json.lon_to }}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1136,
+        -304
+      ],
+      "id": "a5f41739-21cc-4e9d-bf12-ba87c2d6a8af",
+      "name": "HTTP Request",
+      "credentials": {
+        "openRouterApi": {
+          "id": "lvVWgxJwAbbKVHHb",
+          "name": "OpenRouter account"
+        },
+        "openWeatherMapApi": {
+          "id": "dLpS0Oic1TMiw9bK",
+          "name": "OpenWeatherMap account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.tomtom.com/routing/1/calculateRoute/{{ $json.lat_from }},{{ $json.lon_from }}:{{ $json.lat_to }},{{ $json.lon_to }}/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AG48rZZyiyb17VQQjm5ejlG81wjRgEtu"
+            },
+            {
+              "name": "traffic",
+              "value": "true"
+            },
+            {
+              "name": "travelMode",
+              "value": "car"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "866c223d-e5cc-45d2-932a-4a7d2ac6bf26",
+      "name": "TomTom Traffic API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1136,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const tomtom = $('TomTom Traffic API').first().json; const weather = $('HTTP Request').first().json; const travelSecs = tomtom?.routes?.[0]?.summary?.travelTimeInSeconds ?? 0; const delaySecs = tomtom?.routes?.[0]?.summary?.trafficDelayInSeconds ?? 0; const temp = weather?.main?.temp ?? null; const hum = weather?.main?.humidity ?? null; const travelNorm = Math.min(1, travelSecs / (45*60)); const tempNorm = temp == null ? 0.3 : Math.min(1, Math.max(0, (temp-18)/17)); const humNorm = hum == null ? 0.3 : Math.min(1, hum/100); const stress = 0.7*travelNorm + 0.2*tempNorm + 0.1*humNorm; let bucket = 'Low'; if (stress >= 0.75) bucket = 'Very High'; else if (stress >= 0.6) bucket = 'High'; else if (stress >= 0.4) bucket = 'Moderate'; return { travel_secs: travelSecs, delay_secs: delaySecs, temp_c: temp, humidity_pct: hum, weather_desc: weather.weather?.[0]?.description ?? '', stress_index: +stress.toFixed(3), stress_bucket: bucket, run_iso: new Date().toISOString() };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        48
+      ],
+      "id": "5974edd6-5d35-4dc1-be69-7ecc20ba7bac",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {},
+      "id": "be7f0b83-bfaf-4afb-b9ea-0002f5abe742",
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1408,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=The following is a commuter report:\n\n- Route: Ruwi to Al Khuwair\n- Travel time: {{Math.round($json.travel_secs/60)}} minutes (delay: {{Math.round($json.delay_secs/60)}} min)\n- Weather: {{$json.temp_c}}°C, humidity {{$json.humidity_pct}}%\n- Stress index: {{$json.stress_index}} ({{$json.stress_bucket}})\n\nWrite a one-sentence summary for a commuter. If stress is high, give a tip for a calmer commute.\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        48
+      ],
+      "id": "9499ae97-88ca-453d-bac0-399ce603dee3",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "h76RfRHIFH8wbDsy",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "sanub148888@gmail.com",
+        "subject": " Urban Calm Alert: ",
+        "emailType": "text",
+        "message": "=Hello Sanub,\n\nYour commute stress forecast is complete.\n\nRoute: Ruwi to Al Khuwair\nExpected Travel Time: {{Math.round($node[\"Code in JavaScript1\"].json.travel_secs/60)}} min\nExpected Delay: {{Math.round($node[\"Code in JavaScript1\"].json.delay_secs/60)}} min\nWeather: {{$node[\"Code in JavaScript1\"].json.temp_c}}°C\nHumidity: {{$node[\"Code in JavaScript1\"].json.humidity_pct}}%\n---\nCommute Stress Index: {{$node[\"Code in JavaScript1\"].json.stress_index}}\nStress Level: {{$node[\"Code in JavaScript1\"].json.stress_bucket}}\n\n{{$json.summary_text || $json.generated_text || \"\"}}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2160,
+        48
+      ],
+      "id": "b9490484-46b1-4a25-b7db-c7a246e4ffde",
+      "name": "Send a message",
+      "webhookId": "9eb63727-4754-40f0-aa65-027c118655b0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MCm9ldBAtUZiW2Qk",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "TomTom Traffic API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TomTom Traffic API": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7a241ea3-51a9-4543-af59-ab395d51d2b5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "eeeba995699c621046a86a4995bcdea282b3900a8dce5ce8177f323e5439abd8"
+  },
+  "id": "kU9XQdaKuQzKMQ98",
+  "tags": []
+}
